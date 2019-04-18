@@ -12,48 +12,35 @@ from keras.layers import Flatten
 from keras.layers import Dense # Fully Connected Networks
 import preprocess 
 from sklearn.model_selection import train_test_split
+import os
+with open('file_path.txt', 'r') as files:
+    file_path = files.readlines()
 
+selections = []
+paths_tag = []
+for i in file_path:
+    path, tag, split_half = i.rstrip().split(',')
+    if not tag in selections:
+        selections.append(tag)
+    paths_tag.append((path, tag, split_half))
+    
 #argument
-selections=['ace', 'titan']
+data_merge = []
+for i in paths_tag:
+    data = preprocess.read_files_name(i[0], i[1], i[2])
+    data_merge += data
 
 #data = preprocess.read_files('data/ace', split_half=True)
 #data2 = preprocess.read_files('data/titan/', split_half=False)
 
-ace = preprocess.read_files_name('data/ace', lable='ace')
-titan = preprocess.read_files_name('data/titan', lable='titan')
-
-data_merge = ace + titan
+#ace = preprocess.read_files_name('data/ace', lable='ace')
+#titan = preprocess.read_files_name('data/titan', lable='titan')
+#
+#data_merge = ace + titan
 train, test = train_test_split(data_merge, test_size=0.1)
-'''
-n1 = len(ace)
-n2 = len(titan)
-nh1 = int(n1/2)
-nh2 = int(n2/2)
-
-train = ace[:nh1] + titan[:nh2]
-test = ace[nh1:] + titan[nh2:]
 
 
 
-
-for i in range(len(data)):
-    data[i] = preprocess.pipeline(data[i], reshape_size=(1100, 700))
-    
-for i in range(len(data2)):
-    data2[i] = preprocess.pipeline(data2[i], reshape_size=(1100, 700))
-            
-n1 = len(data)
-n2 = len(data2)
-nh1 = int(n1/2)
-nh2 = int(n2/2)
-
-train_x = np.array(data[:nh1] + data2[:nh2]).reshape((nh1+nh2, 1100, 700, 1))
-train_x = train_x / 256
-test_x = np.array(data[nh1:] + data2[nh2:]).reshape((n1+n2-nh1-nh2, 1100, 700, 1))
-test_x = test_x / 256
-train_y = np.array([0]*nh1 + [1]*nh2).reshape((nh1+nh2, 1))
-test_y = np.array([0]*(n1-nh1) + [1]*(n2-nh2)).reshape((n1+n2-nh1-nh2, 1))
-'''
 model = Sequential()  
 model.add(Conv2D(32, (7, 7), strides = 3, input_shape = (770, 490, 1), activation = 'relu'))
 model.add(MaxPooling2D(pool_size = (2, 2)))
@@ -72,11 +59,28 @@ model.add(Dense(output_dim = len(selections), activation = 'sigmoid'))
 
 model.compile(optimizer = 'adam', loss = 'binary_crossentropy', metrics = ['accuracy'])
 
-model.fit_generator(generator=preprocess.generator(train, batch_size=30, reshape_size=(490, 770), selections=selections, normalize=True), 
-                    validation_data=preprocess.generator(test, batch_size=20, reshape_size=(490, 770), selections=selections, normalize=True),
-                    steps_per_epoch=50,
-                    validation_steps=20,
+train_gen = preprocess.generator(train, batch_size=20, crop_size=(770, 490), selections=selections, normalize=True)
+test_gen = preprocess.generator(test, batch_size=20, crop_size=(770, 490), selections=selections, normalize=True)
+
+model.fit_generator(generator=train_gen, 
+                    validation_data=test_gen,
+                    steps_per_epoch=2,
+                    validation_steps=2,
                     epochs = 3
                     )
 
 model.save('comic_classifer.h5')
+with open('comic_classifer.lable', 'w') as files:
+    files.write(','.join(selections))
+model_name = input('please input a model name')
+safe_name = True
+if model_name+'.h5' in os.listdir('model'):
+    safe_name = False
+    print('filename conflict')
+    if input('key "f" for covering the old file') == 'f':
+        safe_name = True
+if safe_name:
+    model.save('model/%s.h5'%model_name)
+    with open('model/%s.lable'%model_name, 'w') as files:
+        files.write(','.join(selections))
+    print('model save successfully')

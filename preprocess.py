@@ -11,25 +11,21 @@ import random
 import numpy as np
 from matplotlib import pyplot as plt
 
-def read_files_name(directory, lable):
+def read_files_name(directory, lable, split_half):
     data_list = []
     file_list = os.listdir(directory)
     for i in file_list:
         if '.' in i:
             if not 'config' in i:
-                data_list.append((directory + '/' + i, lable))
+                data_list.append((directory + '/' + i, lable, split_half))
         else:
-            data_list += read_files_name(directory + '/' + i, lable)
+            data_list += read_files_name(directory + '/' + i, lable, split_half)
     return data_list
             
-def read_file(directory, normalize=False):
+def read_file(directory, normalize=False, split_half=False):
     image = cv2.imread(directory, cv2.IMREAD_GRAYSCALE)
     if type(image) != type(None):
-        split_half=False
-        split_true = ['ace']
-        for i in split_true:
-            if i in directory:
-                split_half = True
+
         if normalize:
             image = image / 256
         if split_half:
@@ -79,14 +75,19 @@ def kfold(data, k=10):
             )
     return output
 
-def pipeline(image, reshape_size = None):
+def pipeline(image, reshape_size = None, crop_size = None):
     image_after = image
+    x, y = image_after.shape
     if reshape_size:
         if reshape_size < image_after.shape:
             image_after = cv2.resize(image, reshape_size, interpolation=cv2.INTER_AREA)
         else:
             image_after = cv2.resize(image, reshape_size, interpolation=cv2.INTER_CUBIC)
-        
+    if crop_size:
+        if crop_size[0] > x or crop_size[1] > y:
+            image_after = None
+        else:
+            image_after = image_after[:crop_size[0], :crop_size[1]]
     
     return image_after
 
@@ -104,15 +105,19 @@ def generator(xy, batch_size, selections, **kwargs):
         
         
         images = read_file(i[0],
-            normalize = kwargs.get('normalize', False)
+            normalize = kwargs.get('normalize', False),
+            split_half = i[2]
         )
         if type(images) != type(None):
             for image in images:
                 image = pipeline(image,
-                    reshape_size = kwargs.get('reshape_size', None)
+                    reshape_size = kwargs.get('reshape_size', None),
+                    crop_size = kwargs.get('crop_size', None)
                 )
-                batch.append(image) 
-                lables.append(lable)
+                if type(image) != type(None):
+                    batch.append(image) 
+                    lables.append(lable)
+                    
                 if len(batch) >= batch_size:            
                     output = np.array(batch)
                     output = output.reshape((output.shape[0],output.shape[1],output.shape[2],1))
